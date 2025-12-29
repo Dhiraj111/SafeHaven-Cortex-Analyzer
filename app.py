@@ -13,12 +13,40 @@ st.set_page_config(layout="wide", page_title="SafeHaven Analytics", page_icon="�
 conn = st.connection("snowflake")
 
 # ==========================================
-# ⚡ SIDEBAR: SIMULATION & PREDICTION
+# ⚡ SIDEBAR: MLOPS & SIMULATION
 # ==========================================
 with st.sidebar:
     st.title("⚡ Control Center")
     
-    # --- PART 1: AI PREDICTOR (NEW!) ---
+    # --- PART 1: MLOPS MONITOR (DEBUG MODE) ---
+    st.subheader("⚙️ MLOps Pipeline")
+    
+    try:
+        # Use RAW CURSOR to bypass Streamlit's SQL parser
+        cursor = conn.raw_connection.cursor()
+        
+        # DEBUG FIX: We removed "pattern='...'" to find ANY file in the stage
+        cursor.execute("LIST @CLEAN_ROOM_DB.ANALYSIS.MODEL_STAGE")
+        result = cursor.fetchall() # Returns list of tuples
+        
+        if result:
+            # Snowflake LIST returns: [name, size, md5, last_modified]
+            # The timestamp is the 4th item (index 3)
+            last_mod = result[0][3] 
+            
+            st.caption(f"🧠 Model Last Retrained:")
+            st.code(f"{last_mod}")
+            st.success("✅ Auto-Retraining Active")
+        else:
+            st.error("⚠️ Stage is Empty!")
+            st.info("Action Required: Go to Snowflake and run: CALL CLEAN_ROOM_DB.ANALYSIS.TRAIN_RISK_MODEL();")
+            
+    except Exception as e:
+        st.error(f"Connection Error: {e}")
+
+    st.divider()
+    
+    # --- PART 2: AI RISK CALCULATOR ---
     st.subheader("🔮 AI Risk Calculator")
     st.info("Test the Machine Learning Model directly.")
     
@@ -30,7 +58,6 @@ with st.sidebar:
     
     if st.button("Calculate Risk Probability", type="primary"):
         try:
-            # Call the Snowflake UDF we created
             sql_predict = f"""
             SELECT CLEAN_ROOM_DB.ANALYSIS.PREDICT_RISK(
                 {p_income}, {p_age}, {p_bmi}, {p_costs}
@@ -39,37 +66,33 @@ with st.sidebar:
             df_pred = conn.query(sql_predict, ttl=0)
             risk_score = df_pred.iloc[0]['PROBABILITY']
             
-            # Show Result
             if risk_score > 0.7:
                 st.error(f"High Default Risk: {risk_score:.1%}")
             elif risk_score > 0.3:
                 st.warning(f"Moderate Risk: {risk_score:.1%}")
             else:
                 st.success(f"Low Risk: {risk_score:.1%}")
-                
         except Exception as e:
             st.error(f"Prediction Error: {e}")
 
     st.divider()
 
-    # --- PART 2: LIVE SIMULATION ---
+    # --- PART 3: CHAOS SIMULATION ---
     st.subheader("🚨 Chaos Simulation")
     
-    # Track batches in session state
     if 'batch_count' not in st.session_state:
         st.session_state.batch_count = 0
 
     st.write(f"**Batches Injected:** {st.session_state.batch_count}")
 
     if st.button("Inject Batch (50 Users)"):
-        with st.spinner("Simulating market event..."):
+        with st.spinner("Simulating market event & Triggering Stream..."):
             try:
                 cursor = conn.raw_connection.cursor()
                 
-                # A. Generate Fake Data
+                # Generate Fake Data
                 new_emails = [f"live_{st.session_state.batch_count}_{random.randint(1000,9999)}@demo.com" for _ in range(50)]
                 
-                # B. Insert High Risk Data
                 values_bank = []
                 values_ins = []
                 for email in new_emails:
@@ -85,14 +108,14 @@ with st.sidebar:
                 conn.raw_connection.commit()
                 
                 st.session_state.batch_count += 1
-                st.toast(f"⚠️ 50 Records Injected!", icon="🚨")
+                st.toast(f"⚠️ Data Injected! Watch the MLOps Timestamp update shortly.", icon="🤖")
                 time.sleep(2) 
                 st.rerun()
                 
             except Exception as e:
                 st.error(f"Error: {e}")
 
-    # --- PART 3: RESET ---
+    # --- PART 4: RESET ---
     if st.button("🔄 Reset System"):
         with st.spinner("Cleaning database..."):
             cursor = conn.raw_connection.cursor()
@@ -145,18 +168,19 @@ with col2:
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Bar Trace (Volume)
+    # Bar Trace (Volume - Grows with clicks)
     fig.add_trace(
         go.Bar(x=df['CREDIT_GRADE'], y=df['TOTAL_CUSTOMERS'], name="Customer Volume", marker_color='#83c9ff'),
         secondary_y=False
     )
 
-    # Line Trace (Risk)
+    # Line Trace (Risk Ratio)
     fig.add_trace(
         go.Scatter(x=df['CREDIT_GRADE'], y=df['COST_TO_INCOME_RATIO'], name="Risk Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=4)),
         secondary_y=True
     )
 
+    # Layout Polish
     fig.update_layout(
         height=450,
         margin=dict(t=30, b=0, l=0, r=0),
@@ -191,4 +215,4 @@ if st.button("Generate AI Insight"):
             
         except Exception as e:
             st.warning("Simulated AI Response (Region Limit).")
-            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. Grade G customers now show a Cost-to-Income ratio exceeding 25%, indicating extreme financial fragility.")
+            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. Grade G customers now show a Cost-to-Income ratio exceeding 25%.")
