@@ -13,12 +13,12 @@ st.set_page_config(layout="wide", page_title="SafeHaven Analytics", page_icon="�
 conn = st.connection("snowflake")
 
 # ==========================================
-# ⚡ REAL-TIME SIDEBAR (Improved)
+# ⚡ REAL-TIME SIDEBAR (Simulation Control)
 # ==========================================
 with st.sidebar:
     st.header("⚡ Simulation Control")
     
-    # Feature 1: Session State to track batches
+    # Track batches in session state
     if 'batch_count' not in st.session_state:
         st.session_state.batch_count = 0
 
@@ -31,7 +31,7 @@ with st.sidebar:
             try:
                 cursor = conn.raw_connection.cursor()
                 
-                # A. Generate Fake Data
+                # A. Generate Fake Data (Unique Emails per batch)
                 new_emails = [f"live_{st.session_state.batch_count}_{random.randint(1000,9999)}@demo.com" for _ in range(50)]
                 
                 # B. Insert High Risk Data
@@ -46,18 +46,18 @@ with st.sidebar:
                 sql_bank = f"INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES {','.join(values_bank)}"
                 sql_ins = f"INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES {','.join(values_ins)}"
                 
+                # Execute Raw SQL
                 cursor.execute(sql_bank)
                 cursor.execute(sql_ins)
                 
-                # C. Force Refresh
+                # C. Force Dynamic Table Refresh
                 cursor.execute("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
                 conn.raw_connection.commit()
                 
-                # Update Counter
+                # Update Counter & UI
                 st.session_state.batch_count += 1
-                
                 st.toast(f"⚠️ Alert! 50 High-Risk Records Detected!", icon="🚨")
-                time.sleep(2) # Give Snowflake a moment to finish the refresh
+                time.sleep(2) 
                 st.rerun()
                 
             except Exception as e:
@@ -65,15 +65,16 @@ with st.sidebar:
 
     st.divider()
 
-    # --- RESET BUTTON (New!) ---
+    # --- RESET BUTTON ---
     if st.button("🔄 Reset / Clear Data"):
         with st.spinner("Cleaning database..."):
             cursor = conn.raw_connection.cursor()
-            # Delete only the "fake" live users (keep the original 1000)
+            # Delete only the "fake" live users
             cursor.execute("DELETE FROM BANK_DB.DATA.LOAN_CUSTOMERS WHERE EMAIL LIKE 'live_%'")
             cursor.execute("DELETE FROM INSURER_DB.DATA.MEDICAL_CLIENTS WHERE EMAIL LIKE 'live_%'")
             cursor.execute("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
             conn.raw_connection.commit()
+            
             st.session_state.batch_count = 0
             st.success("System Reset Complete.")
             time.sleep(2)
@@ -90,11 +91,9 @@ st.markdown("### Cross-Industry Risk Monitoring System")
 query = "SELECT * FROM CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS ORDER BY CREDIT_GRADE"
 df = conn.query(query, ttl=0) 
 
-# Feature 2: Top-Level KPI Metrics (The "Wow" Factor)
-# We calculate these from the live dataframe
+# Feature 2: Top-Level KPI Metrics
 total_users = df['TOTAL_CUSTOMERS'].sum()
 avg_med_cost = df['AVG_MEDICAL_COSTS'].mean()
-# High Risk = Grade F and G
 high_risk_users = df[df['CREDIT_GRADE'].isin(['F', 'G'])]['TOTAL_CUSTOMERS'].sum()
 
 kpi1, kpi2, kpi3 = st.columns(3)
@@ -109,7 +108,7 @@ col1, col2 = st.columns([1, 2])
 
 with col1:
     st.subheader("📋 Live Activity Feed")
-    # Simulate a log by showing the raw counts
+    # Highlight high ratios in Red
     st.dataframe(
         df[['CREDIT_GRADE', 'TOTAL_CUSTOMERS', 'COST_TO_INCOME_RATIO']].style.highlight_max(axis=0, color='#ff4b4b'), 
         use_container_width=True
@@ -123,22 +122,48 @@ with col2:
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Bar Trace (Medical Costs)
+    # Bar Trace (Shows Volume - Grows with every click)
     fig.add_trace(
-        go.Bar(x=df['CREDIT_GRADE'], y=df['AVG_MEDICAL_COSTS'], name="Avg Medical Costs ($)", marker_color='#83c9ff'),
+        go.Bar(
+            x=df['CREDIT_GRADE'], 
+            y=df['TOTAL_CUSTOMERS'], 
+            name="Customer Volume", 
+            marker_color='#83c9ff'
+        ),
         secondary_y=False
     )
 
-    # Line Trace (Risk Ratio)
+    # Line Trace (Shows Risk Ratio)
     fig.add_trace(
-        go.Scatter(x=df['CREDIT_GRADE'], y=df['COST_TO_INCOME_RATIO'], name="Cost/Income Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=4)),
+        go.Scatter(
+            x=df['CREDIT_GRADE'], 
+            y=df['COST_TO_INCOME_RATIO'], 
+            name="Risk Ratio (%)", 
+            mode='lines+markers', 
+            line=dict(color='#ff4b4b', width=4)
+        ),
         secondary_y=True
     )
 
-    fig.update_layout(height=450, title_text="Live Risk Correlation Engine")
-    fig.update_xaxes(title_text="Credit Grade")
-    fig.update_yaxes(title_text="Medical Costs ($)", secondary_y=False)
-    fig.update_yaxes(title_text="Risk Ratio (%)", secondary_y=True)
+    # Clean Layout Logic
+    fig.update_layout(
+        height=450,
+        margin=dict(t=30, b=0, l=0, r=0), # Tight margins for alignment
+        
+        # Axis Titles
+        xaxis=dict(title="Credit Grade"),
+        yaxis=dict(title="Customer Volume (Count)"),
+        yaxis2=dict(title="Risk Ratio (%)"),
+        
+        # Legend at top right
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
 
     st.plotly_chart(fig, use_container_width=True)
 
