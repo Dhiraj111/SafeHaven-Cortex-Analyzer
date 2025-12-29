@@ -25,7 +25,7 @@ with st.sidebar:
         # Use RAW CURSOR to bypass Streamlit's SQL parser
         cursor = conn.raw_connection.cursor()
         
-        # DEBUG FIX: We removed "pattern='...'" to find ANY file in the stage
+        # We look for ANY file in the stage to avoid pattern matching errors
         cursor.execute("LIST @CLEAN_ROOM_DB.ANALYSIS.MODEL_STAGE")
         result = cursor.fetchall() # Returns list of tuples
         
@@ -46,7 +46,7 @@ with st.sidebar:
 
     st.divider()
     
-    # --- PART 2: AI RISK CALCULATOR ---
+    # --- PART 2: AI RISK CALCULATOR (WITH GAUGE) ---
     st.subheader("🔮 AI Risk Calculator")
     st.info("Test the Machine Learning Model directly.")
     
@@ -58,6 +58,7 @@ with st.sidebar:
     
     if st.button("Calculate Risk Probability", type="primary"):
         try:
+            # Call the Snowflake UDF
             sql_predict = f"""
             SELECT CLEAN_ROOM_DB.ANALYSIS.PREDICT_RISK(
                 {p_income}, {p_age}, {p_bmi}, {p_costs}
@@ -65,13 +66,40 @@ with st.sidebar:
             """
             df_pred = conn.query(sql_predict, ttl=0)
             risk_score = df_pred.iloc[0]['PROBABILITY']
+            risk_pct = risk_score * 100
             
+            # --- INTERACTIVE GAUGE CHART ---
+            fig_gauge = go.Figure(go.Indicator(
+                mode = "gauge+number",
+                value = risk_pct,
+                domain = {'x': [0, 1], 'y': [0, 1]},
+                title = {'text': "Default Probability (%)"},
+                gauge = {
+                    'axis': {'range': [None, 100]},
+                    'bar': {'color': "black"},
+                    'steps': [
+                        {'range': [0, 30], 'color': "#00cc96"},  # Green (Safe)
+                        {'range': [30, 70], 'color': "#ffa15a"}, # Orange (Caution)
+                        {'range': [70, 100], 'color': "#ef553b"} # Red (Danger)
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': risk_pct
+                    }
+                }
+            ))
+            fig_gauge.update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+            # Decision Logic Display
             if risk_score > 0.7:
-                st.error(f"High Default Risk: {risk_score:.1%}")
+                st.error("🚨 AI Recommendation: REJECT APPLICATION")
             elif risk_score > 0.3:
-                st.warning(f"Moderate Risk: {risk_score:.1%}")
+                st.warning("⚠️ AI Recommendation: MANUAL REVIEW REQUIRED")
             else:
-                st.success(f"Low Risk: {risk_score:.1%}")
+                st.success("✅ AI Recommendation: AUTO-APPROVE")
+                
         except Exception as e:
             st.error(f"Prediction Error: {e}")
 
@@ -135,29 +163,49 @@ with st.sidebar:
 st.title("🛡️ SafeHaven: Privacy-Safe Risk Analysis")
 st.markdown("### Cross-Industry Risk Monitoring System (Powered by Snowpark ML)")
 
-# 3. Load Data
+# 3. Load Data & Filters
 query = "SELECT * FROM CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS ORDER BY CREDIT_GRADE"
 df = conn.query(query, ttl=0) 
 
-# Feature 2: KPIs
-total_users = df['TOTAL_CUSTOMERS'].sum()
-avg_med_cost = df['AVG_MEDICAL_COSTS'].mean()
-high_risk_users = df[df['CREDIT_GRADE'].isin(['F', 'G'])]['TOTAL_CUSTOMERS'].sum()
+# --- INTERACTIVE DATA EXPLORER ---
+with st.expander("🔍 Data Explorer & Filters", expanded=True):
+    col_filter, col_metrics = st.columns([1, 3])
+    
+    with col_filter:
+        all_grades = df['CREDIT_GRADE'].unique().tolist()
+        selected_grades = st.multiselect(
+            "Filter by Credit Grade:", 
+            options=all_grades, 
+            default=all_grades
+        )
+    
+    with col_metrics:
+        # Filter the dataframe based on user selection
+        if not selected_grades:
+            st.warning("Please select at least one Credit Grade.")
+            df_filtered = df
+        else:
+            df_filtered = df[df['CREDIT_GRADE'].isin(selected_grades)]
 
-kpi1, kpi2, kpi3 = st.columns(3)
-kpi1.metric("Total Monitored Customers", f"{total_users:,.0f}", delta=f"+{st.session_state.batch_count * 50} New")
-kpi2.metric("Avg Medical Exposure", f"${avg_med_cost:,.0f}", delta_color="inverse")
-kpi3.metric("CRITICAL RISK ALERTS (Grade F/G)", f"{high_risk_users}", delta="Requires Attention", delta_color="inverse")
+        # Calculate KPIs on filtered data
+        total_users = df_filtered['TOTAL_CUSTOMERS'].sum()
+        avg_med_cost = df_filtered['AVG_MEDICAL_COSTS'].mean() if not df_filtered.empty else 0
+        high_risk_users = df_filtered[df_filtered['CREDIT_GRADE'].isin(['F', 'G'])]['TOTAL_CUSTOMERS'].sum()
+
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Total Customers", f"{total_users:,.0f}", delta=f"{len(selected_grades)} Grades Selected")
+        k2.metric("Avg Medical Exposure", f"${avg_med_cost:,.0f}")
+        k3.metric("High Risk Count (F/G)", f"{high_risk_users}", delta_color="inverse")
 
 st.divider()
 
-# 4. Charts
+# 4. Charts (Using Filtered Data)
 col1, col2 = st.columns([1, 2])
 
 with col1:
     st.subheader("📋 Live Activity Feed")
     st.dataframe(
-        df[['CREDIT_GRADE', 'TOTAL_CUSTOMERS', 'COST_TO_INCOME_RATIO']].style.highlight_max(axis=0, color='#ff4b4b'), 
+        df_filtered[['CREDIT_GRADE', 'TOTAL_CUSTOMERS', 'COST_TO_INCOME_RATIO']].style.highlight_max(axis=0, color='#ff4b4b'), 
         use_container_width=True
     )
     if st.session_state.batch_count > 0:
@@ -168,19 +216,18 @@ with col2:
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Bar Trace (Volume - Grows with clicks)
+    # Bar Trace (Volume)
     fig.add_trace(
-        go.Bar(x=df['CREDIT_GRADE'], y=df['TOTAL_CUSTOMERS'], name="Customer Volume", marker_color='#83c9ff'),
+        go.Bar(x=df_filtered['CREDIT_GRADE'], y=df_filtered['TOTAL_CUSTOMERS'], name="Customer Volume", marker_color='#83c9ff'),
         secondary_y=False
     )
 
     # Line Trace (Risk Ratio)
     fig.add_trace(
-        go.Scatter(x=df['CREDIT_GRADE'], y=df['COST_TO_INCOME_RATIO'], name="Risk Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=4)),
+        go.Scatter(x=df_filtered['CREDIT_GRADE'], y=df_filtered['COST_TO_INCOME_RATIO'], name="Risk Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=4)),
         secondary_y=True
     )
 
-    # Layout Polish
     fig.update_layout(
         height=450,
         margin=dict(t=30, b=0, l=0, r=0),
@@ -199,14 +246,15 @@ st.subheader("🤖 Cortex AI Executive Summary")
 if st.button("Generate AI Insight"):
     with st.spinner("Cortex AI is analyzing the correlation..."):
         try:
-            data_context = df.to_string()
+            # We send the filtered dataframe context to the AI
+            data_context = df_filtered.to_string()
             prompt = f"""
-            You are a Risk Officer. Analyze this live dataset:
+            You are a Risk Officer. Analyze this filtered dataset:
             {data_context}
             
-            1. Identify which Credit Grade has the highest 'COST_TO_INCOME_RATIO'.
-            2. Warn about the trend between low credit scores and high medical costs.
-            3. Keep it brief and professional.
+            1. Identify which selected Credit Grade has the highest 'COST_TO_INCOME_RATIO'.
+            2. Provide a 1-sentence warning about the relationship between these specific grades and medical costs.
+            3. Keep it professional.
             """
             prompt_clean = prompt.replace("'", "''")
             cortex_query = f"SELECT snowflake.cortex.COMPLETE('llama3-8b', '{prompt_clean}') as response"
@@ -215,4 +263,4 @@ if st.button("Generate AI Insight"):
             
         except Exception as e:
             st.warning("Simulated AI Response (Region Limit).")
-            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. Grade G customers now show a Cost-to-Income ratio exceeding 25%.")
+            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. The selected cohort shows a Cost-to-Income ratio exceeding safe limits (25%). Immediate review recommended.")
