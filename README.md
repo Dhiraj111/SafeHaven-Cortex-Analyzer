@@ -2,23 +2,35 @@
 
 ### 🏆 Built for AI for Good Hackathon 2025
 
-**SafeHaven** is a privacy-first analytics platform that enables financial institutions (Banks) and Insurance providers to securely collaborate. It uses a **Snowflake Data Clean Room** to join sensitive datasets without exposing PII, and applies **Snowpark ML** to predict customer risk in real-time.
+**SafeHaven** is a privacy-first analytics platform that enables
+financial institutions (Banks) and Insurance providers to securely
+collaborate. It uses a **Snowflake Data Clean Room** to join sensitive
+datasets without exposing PII, and applies **Snowpark ML** to predict
+customer risk in real-time.
 
----
+------------------------------------------------------------------------
 
 ## 🚨 The Problem
-Banks and Insurers possess highly correlated data—financial stress often leads to health decline, and vice-versa. However, strict privacy regulations (GDPR, CCPA) and competitive secrecy prevent them from sharing raw customer data.
-* **Result:** Both industries operate with "Risk Blind Spots."
-* **Consequence:** Higher default rates and inaccurate insurance premiums.
+
+Banks and Insurers possess highly correlated data---financial stress
+often leads to health decline, and vice-versa. However, strict privacy
+regulations (GDPR, CCPA) and competitive secrecy prevent them from
+sharing raw customer data. \* **Result:** Both industries operate with
+"Risk Blind Spots." \* **Consequence:** Higher default rates and
+inaccurate insurance premiums.
 
 ## 💡 The Solution
-SafeHaven acts as a "Trusted Third Party" bridge. It ingests data from both silos, hashes the identities (SHA-256), and allows for **Predictive Risk Modeling** on the combined dataset without ever decrypting the user's identity.
 
----
+SafeHaven acts as a "Trusted Third Party" bridge. It ingests data from
+both silos, hashes the identities (SHA-256), and allows for **Predictive
+Risk Modeling** on the combined dataset without ever decrypting the
+user's identity.
+
+------------------------------------------------------------------------
 
 ## ⚙️ How It Works (Architecture)
 
-```mermaid
+``` mermaid
 graph TD
     A[Bank Database] -->|Hashed Emails| C{Snowflake Clean Room}
     B[Insurance Database] -->|Hashed Emails| C
@@ -89,25 +101,29 @@ cd SafeHaven
 ```
 
 ### 2. Install Dependencies
-```bash
+
+``` bash
 pip install -r requirements.txt
 ```
 
 ### 3. Setup Snowflake Environment
-Run the contents of setup.sql in your Snowflake Worksheet. This script will:
 
-1. Create the Databases (BANK_DB, INSURER_DB, CLEAN_ROOM_DB).
+Run the contents of setup.sql in your Snowflake Worksheet. This script
+will:
 
-2. Create the Dynamic Tables.
+1.  Create the Databases (BANK_DB, INSURER_DB, CLEAN_ROOM_DB).
 
-3. Train the Machine Learning Model.
+2.  Create the Dynamic Tables.
 
-4. Deploy the PREDICT_RISK UDF.
+3.  Train the Machine Learning Model.
+
+4.  Deploy the PREDICT_RISK UDF.
 
 ### 4. Configure Secrets
+
 Create a .streamlit/secrets.toml file:
 
-```bash
+``` bash
 [connections.snowflake]
 user = "YOUR_USER"
 password = "YOUR_PASSWORD"
@@ -115,8 +131,9 @@ account = "YOUR_ACCOUNT_LOCATOR"
 warehouse = "COMPUTE_WH"
 role = "ACCOUNTADMIN"
 ```
+
 ### 5. Run the App
 
-```bash
+``` bash
 streamlit run app.py
 ```
