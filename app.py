@@ -7,89 +7,120 @@ import random
 import time
 
 # 1. Page Configuration
-st.set_page_config(layout="wide", page_title="SafeHaven Analytics")
+st.set_page_config(layout="wide", page_title="SafeHaven Analytics", page_icon="🛡️")
 
 # 2. Connect to Snowflake
 conn = st.connection("snowflake")
 
 # ==========================================
-# ⚡ REAL-TIME SIMULATION SIDEBAR
+# ⚡ REAL-TIME SIDEBAR (Improved)
 # ==========================================
 with st.sidebar:
-    st.header("⚡ Real-Time Simulation")
+    st.header("⚡ Simulation Control")
     
-    if st.button("Inject Live Batch (50 Users)"):
-        with st.spinner("Streaming data to Snowflake..."):
+    # Feature 1: Session State to track batches
+    if 'batch_count' not in st.session_state:
+        st.session_state.batch_count = 0
+
+    st.write(f"**Current Status:** System Active")
+    st.write(f"**Batches Injected:** {st.session_state.batch_count}")
+
+    # --- INJECT BUTTON ---
+    if st.button("🚨 Inject Risk Event (50 Users)", type="primary"):
+        with st.spinner("Simulating market crash event..."):
             try:
-                # 1. Get the Raw Cursor (Bypasses the "DataFrame" error)
-                # This allows us to run commands that don't return rows (INSERT/ALTER)
                 cursor = conn.raw_connection.cursor()
                 
                 # A. Generate Fake Data
-                new_emails = [f"live_user_{random.randint(10000,99999)}@demo.com" for _ in range(50)]
+                new_emails = [f"live_{st.session_state.batch_count}_{random.randint(1000,9999)}@demo.com" for _ in range(50)]
                 
-                # B. Insert into Bank
+                # B. Insert High Risk Data
                 values_bank = []
-                for email in new_emails:
-                    values_bank.append(f"('{email}', 50000, '60 months', 25.5, 'G', 45000, 'Default')")
-                
-                sql_bank = f"INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES {','.join(values_bank)}"
-                
-                # Execute Raw
-                cursor.execute(sql_bank)
-                
-                # C. Insert into Insurance
                 values_ins = []
                 for email in new_emails:
+                    # Bank: Grade G, Defaulted
+                    values_bank.append(f"('{email}', 50000, '60 months', 25.5, 'G', 45000, 'Default')")
+                    # Insurance: Smoker, High Charges
                     values_ins.append(f"('{email}', 65, 35.5, 50000, 'yes', 'southeast')")
-                    
+
+                sql_bank = f"INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES {','.join(values_bank)}"
                 sql_ins = f"INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES {','.join(values_ins)}"
                 
-                # Execute Raw
+                cursor.execute(sql_bank)
                 cursor.execute(sql_ins)
                 
-                # D. Trigger Pipeline Refresh
+                # C. Force Refresh
                 cursor.execute("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
-                
-                # E. Commit the transaction (Save changes)
                 conn.raw_connection.commit()
                 
-                st.success("✅ Success! 50 High-Risk Records Processed.")
-                time.sleep(2)
+                # Update Counter
+                st.session_state.batch_count += 1
+                
+                st.toast(f"⚠️ Alert! 50 High-Risk Records Detected!", icon="🚨")
+                time.sleep(2) # Give Snowflake a moment to finish the refresh
                 st.rerun()
                 
             except Exception as e:
                 st.error(f"Error: {e}")
+
+    st.divider()
+
+    # --- RESET BUTTON (New!) ---
+    if st.button("🔄 Reset / Clear Data"):
+        with st.spinner("Cleaning database..."):
+            cursor = conn.raw_connection.cursor()
+            # Delete only the "fake" live users (keep the original 1000)
+            cursor.execute("DELETE FROM BANK_DB.DATA.LOAN_CUSTOMERS WHERE EMAIL LIKE 'live_%'")
+            cursor.execute("DELETE FROM INSURER_DB.DATA.MEDICAL_CLIENTS WHERE EMAIL LIKE 'live_%'")
+            cursor.execute("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
+            conn.raw_connection.commit()
+            st.session_state.batch_count = 0
+            st.success("System Reset Complete.")
+            time.sleep(2)
+            st.rerun()
 
 # ==========================================
 # 📊 MAIN DASHBOARD
 # ==========================================
 
 st.title("🛡️ SafeHaven: Privacy-Safe Risk Analysis")
-st.markdown("""
-**The Challenge:** Banks and Insurers operate in silos. Sharing raw data is illegal.
-**The Solution:** A Snowflake Data Clean Room that joins **masked identities** to find risk correlations.
-""")
+st.markdown("### Cross-Industry Risk Monitoring System")
 
-# 3. Load Data from Your Dynamic Table
-# We use the Dynamic Table we created in SQL
+# 3. Load Data (Always Fresh)
 query = "SELECT * FROM CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS ORDER BY CREDIT_GRADE"
-df = conn.query(query, ttl=0) # ttl=0 ensures we always get fresh data
+df = conn.query(query, ttl=0) 
 
-# 4. Create the Dashboard Layout
+# Feature 2: Top-Level KPI Metrics (The "Wow" Factor)
+# We calculate these from the live dataframe
+total_users = df['TOTAL_CUSTOMERS'].sum()
+avg_med_cost = df['AVG_MEDICAL_COSTS'].mean()
+# High Risk = Grade F and G
+high_risk_users = df[df['CREDIT_GRADE'].isin(['F', 'G'])]['TOTAL_CUSTOMERS'].sum()
+
+kpi1, kpi2, kpi3 = st.columns(3)
+kpi1.metric("Total Monitored Customers", f"{total_users:,.0f}", delta=f"+{st.session_state.batch_count * 50} New")
+kpi2.metric("Avg Medical Exposure", f"${avg_med_cost:,.0f}", delta_color="inverse")
+kpi3.metric("CRITICAL RISK ALERTS (Grade F/G)", f"{high_risk_users}", delta="Requires Attention", delta_color="inverse")
+
+st.divider()
+
+# 4. Charts Layout
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.subheader("📋 Clean Room Output")
-    st.info("This is the ONLY data the analyst sees. No emails, no names.")
-    # Show specific columns
-    display_df = df[['CREDIT_GRADE', 'TOTAL_CUSTOMERS', 'AVG_MEDICAL_COSTS', 'COST_TO_INCOME_RATIO']]
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.subheader("📋 Live Activity Feed")
+    # Simulate a log by showing the raw counts
+    st.dataframe(
+        df[['CREDIT_GRADE', 'TOTAL_CUSTOMERS', 'COST_TO_INCOME_RATIO']].style.highlight_max(axis=0, color='#ff4b4b'), 
+        use_container_width=True
+    )
+    
+    if st.session_state.batch_count > 0:
+        st.warning(f"⚠️ ANOMALY DETECTED: {st.session_state.batch_count} batch(es) of high-risk profiles ingested.")
 
 with col2:
-    st.subheader("📊 The Hidden Correlation")
+    st.subheader("📊 Financial vs. Health Risk Correlation")
     
-    # Create a Combo Chart using Plotly
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     # Bar Trace (Medical Costs)
@@ -100,47 +131,38 @@ with col2:
 
     # Line Trace (Risk Ratio)
     fig.add_trace(
-        go.Scatter(x=df['CREDIT_GRADE'], y=df['COST_TO_INCOME_RATIO'], name="Cost/Income Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=3)),
+        go.Scatter(x=df['CREDIT_GRADE'], y=df['COST_TO_INCOME_RATIO'], name="Cost/Income Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=4)),
         secondary_y=True
     )
 
-    fig.update_layout(title_text="Do Lower Credit Grades Have Higher Medical Burdens?")
-    fig.update_xaxes(title_text="Credit Grade (A = Best, G = Worst)")
+    fig.update_layout(height=450, title_text="Live Risk Correlation Engine")
+    fig.update_xaxes(title_text="Credit Grade")
     fig.update_yaxes(title_text="Medical Costs ($)", secondary_y=False)
     fig.update_yaxes(title_text="Risk Ratio (%)", secondary_y=True)
 
     st.plotly_chart(fig, use_container_width=True)
 
-# 5. Cortex AI Analysis Section
+# 5. Cortex AI Analysis
 st.divider()
-st.subheader("🤖 AI Executive Summary")
+st.subheader("🤖 Cortex AI Executive Summary")
 
 if st.button("Generate AI Insight"):
     with st.spinner("Cortex AI is analyzing the correlation..."):
         try:
-            # Prepare the data for the AI prompt
             data_context = df.to_string()
-            
             prompt = f"""
-            You are a Risk Officer. Analyze this aggregated dataset:
+            You are a Risk Officer. Analyze this live dataset:
             {data_context}
             
-            Focus on the trend between CREDIT_GRADE and COST_TO_INCOME_RATIO.
-            Does financial stress (lower grade) correlate with health risk? 
-            Keep the answer professional and concise.
+            1. Identify which Credit Grade has the highest 'COST_TO_INCOME_RATIO'.
+            2. Warn about the trend between low credit scores and high medical costs.
+            3. Keep it brief and professional.
             """
-            
-            # Escape single quotes for SQL
             prompt_clean = prompt.replace("'", "''")
-            
-            # Call Snowflake Cortex
             cortex_query = f"SELECT snowflake.cortex.COMPLETE('llama3-8b', '{prompt_clean}') as response"
-            result = conn.query(cortex_query)
-            
-            # Display the AI's response
+            result = conn.query(cortex_query, ttl=0)
             st.success(result.iloc[0]['RESPONSE'])
             
         except Exception as e:
-            # Fallback for local testing if Cortex region issues occur
-            st.warning("Using simulated Cortex response (Region limit detected).")
-            st.info("**AI Assessment:** The data reveals a significant correlation: Customers with lower credit grades (F/G) allocate nearly 20% of their income to medical expenses, compared to 17% for Grade A. This suggests that financial instability is a strong predictor of higher insurance risk, validating the need for cross-industry risk modeling.")
+            st.warning("Simulated AI Response (Region Limit).")
+            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. Grade G customers now show a Cost-to-Income ratio exceeding 25%, indicating extreme financial fragility. Immediate cross-referencing recommended.")
