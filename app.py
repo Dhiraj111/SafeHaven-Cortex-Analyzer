@@ -13,70 +13,95 @@ st.set_page_config(layout="wide", page_title="SafeHaven Analytics", page_icon="�
 conn = st.connection("snowflake")
 
 # ==========================================
-# ⚡ REAL-TIME SIDEBAR (Simulation Control)
+# ⚡ SIDEBAR: SIMULATION & PREDICTION
 # ==========================================
 with st.sidebar:
-    st.header("⚡ Simulation Control")
+    st.title("⚡ Control Center")
+    
+    # --- PART 1: AI PREDICTOR (NEW!) ---
+    st.subheader("🔮 AI Risk Calculator")
+    st.info("Test the Machine Learning Model directly.")
+    
+    # Inputs for the Model
+    p_income = st.number_input("Annual Income ($)", value=50000, step=5000)
+    p_costs = st.number_input("Medical Costs ($)", value=20000, step=1000)
+    p_age = st.slider("Age", 18, 80, 35)
+    p_bmi = st.slider("BMI", 15.0, 50.0, 25.0)
+    
+    if st.button("Calculate Risk Probability", type="primary"):
+        try:
+            # Call the Snowflake UDF we created
+            sql_predict = f"""
+            SELECT CLEAN_ROOM_DB.ANALYSIS.PREDICT_RISK(
+                {p_income}, {p_age}, {p_bmi}, {p_costs}
+            ) as PROBABILITY
+            """
+            df_pred = conn.query(sql_predict, ttl=0)
+            risk_score = df_pred.iloc[0]['PROBABILITY']
+            
+            # Show Result
+            if risk_score > 0.7:
+                st.error(f"High Default Risk: {risk_score:.1%}")
+            elif risk_score > 0.3:
+                st.warning(f"Moderate Risk: {risk_score:.1%}")
+            else:
+                st.success(f"Low Risk: {risk_score:.1%}")
+                
+        except Exception as e:
+            st.error(f"Prediction Error: {e}")
+
+    st.divider()
+
+    # --- PART 2: LIVE SIMULATION ---
+    st.subheader("🚨 Chaos Simulation")
     
     # Track batches in session state
     if 'batch_count' not in st.session_state:
         st.session_state.batch_count = 0
 
-    st.write(f"**Current Status:** System Active")
     st.write(f"**Batches Injected:** {st.session_state.batch_count}")
 
-    # --- INJECT BUTTON ---
-    if st.button("🚨 Inject Risk Event (50 Users)", type="primary"):
-        with st.spinner("Simulating market crash event..."):
+    if st.button("Inject Batch (50 Users)"):
+        with st.spinner("Simulating market event..."):
             try:
                 cursor = conn.raw_connection.cursor()
                 
-                # A. Generate Fake Data (Unique Emails per batch)
+                # A. Generate Fake Data
                 new_emails = [f"live_{st.session_state.batch_count}_{random.randint(1000,9999)}@demo.com" for _ in range(50)]
                 
                 # B. Insert High Risk Data
                 values_bank = []
                 values_ins = []
                 for email in new_emails:
-                    # Bank: Grade G, Defaulted
                     values_bank.append(f"('{email}', 50000, '60 months', 25.5, 'G', 45000, 'Default')")
-                    # Insurance: Smoker, High Charges
                     values_ins.append(f"('{email}', 65, 35.5, 50000, 'yes', 'southeast')")
 
                 sql_bank = f"INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES {','.join(values_bank)}"
                 sql_ins = f"INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES {','.join(values_ins)}"
                 
-                # Execute Raw SQL
                 cursor.execute(sql_bank)
                 cursor.execute(sql_ins)
-                
-                # C. Force Dynamic Table Refresh
                 cursor.execute("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
                 conn.raw_connection.commit()
                 
-                # Update Counter & UI
                 st.session_state.batch_count += 1
-                st.toast(f"⚠️ Alert! 50 High-Risk Records Detected!", icon="🚨")
+                st.toast(f"⚠️ 50 Records Injected!", icon="🚨")
                 time.sleep(2) 
                 st.rerun()
                 
             except Exception as e:
                 st.error(f"Error: {e}")
 
-    st.divider()
-
-    # --- RESET BUTTON ---
-    if st.button("🔄 Reset / Clear Data"):
+    # --- PART 3: RESET ---
+    if st.button("🔄 Reset System"):
         with st.spinner("Cleaning database..."):
             cursor = conn.raw_connection.cursor()
-            # Delete only the "fake" live users
             cursor.execute("DELETE FROM BANK_DB.DATA.LOAN_CUSTOMERS WHERE EMAIL LIKE 'live_%'")
             cursor.execute("DELETE FROM INSURER_DB.DATA.MEDICAL_CLIENTS WHERE EMAIL LIKE 'live_%'")
             cursor.execute("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
             conn.raw_connection.commit()
-            
             st.session_state.batch_count = 0
-            st.success("System Reset Complete.")
+            st.success("Reset Complete.")
             time.sleep(2)
             st.rerun()
 
@@ -85,13 +110,13 @@ with st.sidebar:
 # ==========================================
 
 st.title("🛡️ SafeHaven: Privacy-Safe Risk Analysis")
-st.markdown("### Cross-Industry Risk Monitoring System")
+st.markdown("### Cross-Industry Risk Monitoring System (Powered by Snowpark ML)")
 
-# 3. Load Data (Always Fresh)
+# 3. Load Data
 query = "SELECT * FROM CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS ORDER BY CREDIT_GRADE"
 df = conn.query(query, ttl=0) 
 
-# Feature 2: Top-Level KPI Metrics
+# Feature 2: KPIs
 total_users = df['TOTAL_CUSTOMERS'].sum()
 avg_med_cost = df['AVG_MEDICAL_COSTS'].mean()
 high_risk_users = df[df['CREDIT_GRADE'].isin(['F', 'G'])]['TOTAL_CUSTOMERS'].sum()
@@ -103,66 +128,42 @@ kpi3.metric("CRITICAL RISK ALERTS (Grade F/G)", f"{high_risk_users}", delta="Req
 
 st.divider()
 
-# 4. Charts Layout
+# 4. Charts
 col1, col2 = st.columns([1, 2])
 
 with col1:
     st.subheader("📋 Live Activity Feed")
-    # Highlight high ratios in Red
     st.dataframe(
         df[['CREDIT_GRADE', 'TOTAL_CUSTOMERS', 'COST_TO_INCOME_RATIO']].style.highlight_max(axis=0, color='#ff4b4b'), 
         use_container_width=True
     )
-    
     if st.session_state.batch_count > 0:
-        st.warning(f"⚠️ ANOMALY DETECTED: {st.session_state.batch_count} batch(es) of high-risk profiles ingested.")
+        st.warning(f"⚠️ ANOMALY: {st.session_state.batch_count} batch(es) ingested.")
 
 with col2:
     st.subheader("📊 Financial vs. Health Risk Correlation")
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Bar Trace (Shows Volume - Grows with every click)
+    # Bar Trace (Volume)
     fig.add_trace(
-        go.Bar(
-            x=df['CREDIT_GRADE'], 
-            y=df['TOTAL_CUSTOMERS'], 
-            name="Customer Volume", 
-            marker_color='#83c9ff'
-        ),
+        go.Bar(x=df['CREDIT_GRADE'], y=df['TOTAL_CUSTOMERS'], name="Customer Volume", marker_color='#83c9ff'),
         secondary_y=False
     )
 
-    # Line Trace (Shows Risk Ratio)
+    # Line Trace (Risk)
     fig.add_trace(
-        go.Scatter(
-            x=df['CREDIT_GRADE'], 
-            y=df['COST_TO_INCOME_RATIO'], 
-            name="Risk Ratio (%)", 
-            mode='lines+markers', 
-            line=dict(color='#ff4b4b', width=4)
-        ),
+        go.Scatter(x=df['CREDIT_GRADE'], y=df['COST_TO_INCOME_RATIO'], name="Risk Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=4)),
         secondary_y=True
     )
 
-    # Clean Layout Logic
     fig.update_layout(
         height=450,
-        margin=dict(t=30, b=0, l=0, r=0), # Tight margins for alignment
-        
-        # Axis Titles
+        margin=dict(t=30, b=0, l=0, r=0),
         xaxis=dict(title="Credit Grade"),
         yaxis=dict(title="Customer Volume (Count)"),
         yaxis2=dict(title="Risk Ratio (%)"),
-        
-        # Legend at top right
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -190,4 +191,4 @@ if st.button("Generate AI Insight"):
             
         except Exception as e:
             st.warning("Simulated AI Response (Region Limit).")
-            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. Grade G customers now show a Cost-to-Income ratio exceeding 25%, indicating extreme financial fragility. Immediate cross-referencing recommended.")
+            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. Grade G customers now show a Cost-to-Income ratio exceeding 25%, indicating extreme financial fragility.")
