@@ -22,43 +22,42 @@ with st.sidebar:
     st.subheader("⚙️ MLOps Pipeline")
     
     try:
-        # Use RAW CURSOR to bypass Streamlit's SQL parser
         cursor = conn.raw_connection.cursor()
-        
-        # We look for ANY file in the stage to avoid pattern matching errors
         cursor.execute("LIST @CLEAN_ROOM_DB.ANALYSIS.MODEL_STAGE")
-        result = cursor.fetchall() # Returns list of tuples
+        result = cursor.fetchall() 
         
         if result:
-            # Snowflake LIST returns: [name, size, md5, last_modified]
-            # The timestamp is the 4th item (index 3)
             last_mod = result[0][3] 
-            
             st.caption(f"🧠 Model Last Retrained:")
             st.code(f"{last_mod}")
             st.success("✅ Auto-Retraining Active")
         else:
             st.error("⚠️ Stage is Empty!")
-            st.info("Action Required: Go to Snowflake and run: CALL CLEAN_ROOM_DB.ANALYSIS.TRAIN_RISK_MODEL();")
+            st.info("Run: CALL CLEAN_ROOM_DB.ANALYSIS.TRAIN_RISK_MODEL();")
             
     except Exception as e:
         st.error(f"Connection Error: {e}")
 
     st.divider()
     
-    # --- PART 2: AI RISK CALCULATOR (WITH GAUGE) ---
+    # --- PART 2: AI RISK CALCULATOR (INTERACTIVE) ---
     st.subheader("🔮 AI Risk Calculator")
-    st.info("Test the Machine Learning Model directly.")
     
-    # Inputs for the Model
+    # Auto-Calculate BMI from Height/Weight
+    col_h, col_w = st.columns(2)
+    with col_h:
+        p_height = st.number_input("Ht (m)", 1.50, 2.20, 1.75)
+    with col_w:
+        p_weight = st.number_input("Wt (kg)", 40, 150, 70)
+    
+    p_bmi = p_weight / (p_height ** 2)
+    
     p_income = st.number_input("Annual Income ($)", value=50000, step=5000)
     p_costs = st.number_input("Medical Costs ($)", value=20000, step=1000)
     p_age = st.slider("Age", 18, 80, 35)
-    p_bmi = st.slider("BMI", 15.0, 50.0, 25.0)
     
     if st.button("Calculate Risk Probability", type="primary"):
         try:
-            # Call the Snowflake UDF
             sql_predict = f"""
             SELECT CLEAN_ROOM_DB.ANALYSIS.PREDICT_RISK(
                 {p_income}, {p_age}, {p_bmi}, {p_costs}
@@ -68,64 +67,76 @@ with st.sidebar:
             risk_score = df_pred.iloc[0]['PROBABILITY']
             risk_pct = risk_score * 100
             
-            # --- INTERACTIVE GAUGE CHART ---
+            # Gauge Chart
             fig_gauge = go.Figure(go.Indicator(
                 mode = "gauge+number",
                 value = risk_pct,
-                domain = {'x': [0, 1], 'y': [0, 1]},
                 title = {'text': "Default Probability (%)"},
                 gauge = {
                     'axis': {'range': [None, 100]},
                     'bar': {'color': "black"},
                     'steps': [
-                        {'range': [0, 30], 'color': "#00cc96"},  # Green (Safe)
-                        {'range': [30, 70], 'color': "#ffa15a"}, # Orange (Caution)
-                        {'range': [70, 100], 'color': "#ef553b"} # Red (Danger)
+                        {'range': [0, 30], 'color': "#00cc96"},
+                        {'range': [30, 70], 'color': "#ffa15a"},
+                        {'range': [70, 100], 'color': "#ef553b"}
                     ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': risk_pct
-                    }
+                    'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': risk_pct}
                 }
             ))
-            fig_gauge.update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10))
+            fig_gauge.update_layout(height=200, margin=dict(l=10, r=10, t=30, b=10))
             st.plotly_chart(fig_gauge, use_container_width=True)
 
-            # Decision Logic Display
             if risk_score > 0.7:
-                st.error("🚨 AI Recommendation: REJECT APPLICATION")
+                st.error("🚨 REJECT APPLICATION")
             elif risk_score > 0.3:
-                st.warning("⚠️ AI Recommendation: MANUAL REVIEW REQUIRED")
+                st.warning("⚠️ MANUAL REVIEW")
             else:
-                st.success("✅ AI Recommendation: AUTO-APPROVE")
+                st.success("✅ AUTO-APPROVE")
                 
         except Exception as e:
             st.error(f"Prediction Error: {e}")
 
     st.divider()
 
-    # --- PART 3: CHAOS SIMULATION ---
+    # --- PART 3: SCENARIO SIMULATION (NEW!) ---
     st.subheader("🚨 Chaos Simulation")
     
     if 'batch_count' not in st.session_state:
         st.session_state.batch_count = 0
 
     st.write(f"**Batches Injected:** {st.session_state.batch_count}")
+    
+    # NEW: Choose your disaster
+    scenario = st.selectbox("Select Scenario:", ["📉 Economic Recession", "病毒 Health Crisis", "📈 Market Boom"])
 
-    if st.button("Inject Batch (50 Users)"):
-        with st.spinner("Simulating market event & Triggering Stream..."):
+    if st.button(f"Inject {scenario}"):
+        with st.spinner(f"Simulating {scenario}..."):
             try:
                 cursor = conn.raw_connection.cursor()
-                
-                # Generate Fake Data
                 new_emails = [f"live_{st.session_state.batch_count}_{random.randint(1000,9999)}@demo.com" for _ in range(50)]
                 
                 values_bank = []
                 values_ins = []
+                
                 for email in new_emails:
-                    values_bank.append(f"('{email}', 50000, '60 months', 25.5, 'G', 45000, 'Default')")
-                    values_ins.append(f"('{email}', 65, 35.5, 50000, 'yes', 'southeast')")
+                    # Logic changes based on scenario!
+                    if "Recession" in scenario:
+                        # Low Income, High Defaults
+                        inc = random.randint(20000, 40000)
+                        status = 'Default'
+                        costs = random.randint(1000, 5000)
+                    elif "Health" in scenario:
+                        # Normal Income, High Medical Costs
+                        inc = random.randint(50000, 80000)
+                        status = 'Fully Paid'
+                        costs = random.randint(40000, 90000) # HUGE COSTS
+                    else: # Boom
+                        inc = random.randint(90000, 150000)
+                        status = 'Fully Paid'
+                        costs = random.randint(1000, 3000)
+
+                    values_bank.append(f"('{email}', 50000, '60 months', 25.5, 'G', {inc}, '{status}')")
+                    values_ins.append(f"('{email}', 45, 28.5, {costs}, 'yes', 'southeast')")
 
                 sql_bank = f"INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES {','.join(values_bank)}"
                 sql_ins = f"INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES {','.join(values_ins)}"
@@ -136,7 +147,7 @@ with st.sidebar:
                 conn.raw_connection.commit()
                 
                 st.session_state.batch_count += 1
-                st.toast(f"⚠️ Data Injected! Watch the MLOps Timestamp update shortly.", icon="🤖")
+                st.toast(f"⚠️ {scenario} Started! Watch charts update.", icon="📉")
                 time.sleep(2) 
                 st.rerun()
                 
@@ -163,76 +174,86 @@ with st.sidebar:
 st.title("🛡️ SafeHaven: Privacy-Safe Risk Analysis")
 st.markdown("### Cross-Industry Risk Monitoring System (Powered by Snowpark ML)")
 
-# 3. Load Data & Filters
+# 3. Load Data
 query = "SELECT * FROM CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS ORDER BY CREDIT_GRADE"
 df = conn.query(query, ttl=0) 
 
-# --- INTERACTIVE DATA EXPLORER ---
-with st.expander("🔍 Data Explorer & Filters", expanded=True):
-    col_filter, col_metrics = st.columns([1, 3])
+# --- INTERACTIVE FILTER & THRESHOLD ---
+with st.expander("🔍 Risk Officer Controls", expanded=True):
+    col_ctrl1, col_ctrl2 = st.columns([1, 2])
     
-    with col_filter:
+    with col_ctrl1:
+        # Dynamic Risk Threshold Slider
+        risk_threshold = st.slider("Define 'High Risk' Threshold (Cost-to-Income %)", 0, 50, 20)
+        st.caption(f"Flagging any grade > {risk_threshold}% exposure")
+        
+    with col_ctrl2:
         all_grades = df['CREDIT_GRADE'].unique().tolist()
-        selected_grades = st.multiselect(
-            "Filter by Credit Grade:", 
-            options=all_grades, 
-            default=all_grades
-        )
-    
-    with col_metrics:
-        # Filter the dataframe based on user selection
-        if not selected_grades:
-            st.warning("Please select at least one Credit Grade.")
-            df_filtered = df
-        else:
-            df_filtered = df[df['CREDIT_GRADE'].isin(selected_grades)]
+        selected_grades = st.multiselect("Filter Grades:", all_grades, default=all_grades)
 
-        # Calculate KPIs on filtered data
-        total_users = df_filtered['TOTAL_CUSTOMERS'].sum()
-        avg_med_cost = df_filtered['AVG_MEDICAL_COSTS'].mean() if not df_filtered.empty else 0
-        high_risk_users = df_filtered[df_filtered['CREDIT_GRADE'].isin(['F', 'G'])]['TOTAL_CUSTOMERS'].sum()
+# Apply Filter
+if selected_grades:
+    df_filtered = df[df['CREDIT_GRADE'].isin(selected_grades)]
+else:
+    df_filtered = df
 
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Total Customers", f"{total_users:,.0f}", delta=f"{len(selected_grades)} Grades Selected")
-        k2.metric("Avg Medical Exposure", f"${avg_med_cost:,.0f}")
-        k3.metric("High Risk Count (F/G)", f"{high_risk_users}", delta_color="inverse")
+# Feature 2: KPIs (Dynamic based on Slider!)
+total_users = df_filtered['TOTAL_CUSTOMERS'].sum()
+avg_med_cost = df_filtered['AVG_MEDICAL_COSTS'].mean() if not df_filtered.empty else 0
+
+# Count how many grades exceed the USER'S threshold
+risky_grades = df_filtered[df_filtered['COST_TO_INCOME_RATIO'] > risk_threshold]
+high_risk_vol = risky_grades['TOTAL_CUSTOMERS'].sum()
+
+k1, k2, k3 = st.columns(3)
+k1.metric("Total Customers", f"{total_users:,.0f}")
+k2.metric("Avg Medical Exposure", f"${avg_med_cost:,.0f}")
+k3.metric(f"Risky Customers (>{risk_threshold}%)", f"{high_risk_vol}", delta="Above Threshold", delta_color="inverse")
 
 st.divider()
 
-# 4. Charts (Using Filtered Data)
+# 4. Charts
 col1, col2 = st.columns([1, 2])
 
 with col1:
     st.subheader("📋 Live Activity Feed")
+    # Highlight rows that exceed the user's threshold
+    def highlight_risk(val):
+        color = '#ff4b4b' if val > risk_threshold else ''
+        return f'background-color: {color}'
+
     st.dataframe(
-        df_filtered[['CREDIT_GRADE', 'TOTAL_CUSTOMERS', 'COST_TO_INCOME_RATIO']].style.highlight_max(axis=0, color='#ff4b4b'), 
+        df_filtered[['CREDIT_GRADE', 'TOTAL_CUSTOMERS', 'COST_TO_INCOME_RATIO']]
+        .style.map(highlight_risk, subset=['COST_TO_INCOME_RATIO'])
+        .format({"COST_TO_INCOME_RATIO": "{:.2f}%"}),
         use_container_width=True
     )
-    if st.session_state.batch_count > 0:
-        st.warning(f"⚠️ ANOMALY: {st.session_state.batch_count} batch(es) ingested.")
 
 with col2:
     st.subheader("📊 Financial vs. Health Risk Correlation")
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Bar Trace (Volume)
+    # Bar Trace
     fig.add_trace(
-        go.Bar(x=df_filtered['CREDIT_GRADE'], y=df_filtered['TOTAL_CUSTOMERS'], name="Customer Volume", marker_color='#83c9ff'),
+        go.Bar(x=df_filtered['CREDIT_GRADE'], y=df_filtered['TOTAL_CUSTOMERS'], name="Volume", marker_color='#83c9ff'),
         secondary_y=False
     )
 
-    # Line Trace (Risk Ratio)
+    # Line Trace
     fig.add_trace(
         go.Scatter(x=df_filtered['CREDIT_GRADE'], y=df_filtered['COST_TO_INCOME_RATIO'], name="Risk Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=4)),
         secondary_y=True
     )
+    
+    # DYNAMIC THRESHOLD LINE (Moves with Slider!)
+    fig.add_hrect(y0=risk_threshold, y1=risk_threshold+0.5, line_width=0, fillcolor="red", opacity=0.5, annotation_text="High Risk Threshold", annotation_position="top right")
 
     fig.update_layout(
         height=450,
         margin=dict(t=30, b=0, l=0, r=0),
         xaxis=dict(title="Credit Grade"),
-        yaxis=dict(title="Customer Volume (Count)"),
+        yaxis=dict(title="Customer Volume"),
         yaxis2=dict(title="Risk Ratio (%)"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
@@ -246,15 +267,14 @@ st.subheader("🤖 Cortex AI Executive Summary")
 if st.button("Generate AI Insight"):
     with st.spinner("Cortex AI is analyzing the correlation..."):
         try:
-            # We send the filtered dataframe context to the AI
             data_context = df_filtered.to_string()
             prompt = f"""
-            You are a Risk Officer. Analyze this filtered dataset:
+            You are a Risk Officer. Analyze this dataset:
             {data_context}
             
-            1. Identify which selected Credit Grade has the highest 'COST_TO_INCOME_RATIO'.
-            2. Provide a 1-sentence warning about the relationship between these specific grades and medical costs.
-            3. Keep it professional.
+            1. Which Credit Grade has the worst 'COST_TO_INCOME_RATIO'?
+            2. Are any grades exceeding the safety threshold of {risk_threshold}%?
+            3. Provide a brief recommendation.
             """
             prompt_clean = prompt.replace("'", "''")
             cortex_query = f"SELECT snowflake.cortex.COMPLETE('llama3-8b', '{prompt_clean}') as response"
@@ -262,5 +282,5 @@ if st.button("Generate AI Insight"):
             st.success(result.iloc[0]['RESPONSE'])
             
         except Exception as e:
-            st.warning("Simulated AI Response (Region Limit).")
-            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. The selected cohort shows a Cost-to-Income ratio exceeding safe limits (25%). Immediate review recommended.")
+            st.warning("Simulated AI Response.")
+            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. Multiple grades exceed your defined risk threshold.")
