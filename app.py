@@ -1,9 +1,69 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import random
+import time
 
 # 1. Page Configuration
 st.set_page_config(layout="wide", page_title="SafeHaven Analytics")
+
+# 2. Connect to Snowflake
+conn = st.connection("snowflake")
+
+# ==========================================
+# ⚡ REAL-TIME SIMULATION SIDEBAR
+# ==========================================
+with st.sidebar:
+    st.header("⚡ Real-Time Simulation")
+    
+    if st.button("Inject Live Batch (50 Users)"):
+        with st.spinner("Streaming data to Snowflake..."):
+            try:
+                # 1. Get the Raw Cursor (Bypasses the "DataFrame" error)
+                # This allows us to run commands that don't return rows (INSERT/ALTER)
+                cursor = conn.raw_connection.cursor()
+                
+                # A. Generate Fake Data
+                new_emails = [f"live_user_{random.randint(10000,99999)}@demo.com" for _ in range(50)]
+                
+                # B. Insert into Bank
+                values_bank = []
+                for email in new_emails:
+                    values_bank.append(f"('{email}', 50000, '60 months', 25.5, 'G', 45000, 'Default')")
+                
+                sql_bank = f"INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES {','.join(values_bank)}"
+                
+                # Execute Raw
+                cursor.execute(sql_bank)
+                
+                # C. Insert into Insurance
+                values_ins = []
+                for email in new_emails:
+                    values_ins.append(f"('{email}', 65, 35.5, 50000, 'yes', 'southeast')")
+                    
+                sql_ins = f"INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES {','.join(values_ins)}"
+                
+                # Execute Raw
+                cursor.execute(sql_ins)
+                
+                # D. Trigger Pipeline Refresh
+                cursor.execute("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
+                
+                # E. Commit the transaction (Save changes)
+                conn.raw_connection.commit()
+                
+                st.success("✅ Success! 50 High-Risk Records Processed.")
+                time.sleep(2)
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+# ==========================================
+# 📊 MAIN DASHBOARD
+# ==========================================
 
 st.title("🛡️ SafeHaven: Privacy-Safe Risk Analysis")
 st.markdown("""
@@ -11,14 +71,10 @@ st.markdown("""
 **The Solution:** A Snowflake Data Clean Room that joins **masked identities** to find risk correlations.
 """)
 
-# 2. Connect to Snowflake
-# This looks for the details you put in secrets.toml
-conn = st.connection("snowflake")
-
-# 3. Load Data from Your Clean Room View
-# We use the view created in Day 2
+# 3. Load Data from Your Dynamic Table
+# We use the Dynamic Table we created in SQL
 query = "SELECT * FROM CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS ORDER BY CREDIT_GRADE"
-df = conn.query(query, ttl=600)
+df = conn.query(query, ttl=0) # ttl=0 ensures we always get fresh data
 
 # 4. Create the Dashboard Layout
 col1, col2 = st.columns([1, 2])
@@ -34,10 +90,6 @@ with col2:
     st.subheader("📊 The Hidden Correlation")
     
     # Create a Combo Chart using Plotly
-    # Bar = Medical Costs, Line = Cost to Income Ratio
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     # Bar Trace (Medical Costs)
