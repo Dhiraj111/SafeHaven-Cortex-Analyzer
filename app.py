@@ -140,15 +140,30 @@ tab1, tab2, tab3 = st.tabs(["📊 Executive Risk View", "🕵️ Customer Invest
 # TAB 1: EXECUTIVE RISK VIEW
 # ------------------------------------------------------------------
 with tab1:
-    risk_threshold = st.slider("High Risk Threshold (%)", 0, 50, 25)
-    risky_vol = df_agg[df_agg['COST_TO_INCOME_RATIO'] > risk_threshold]['TOTAL_CUSTOMERS'].sum()
-    total_vol = df_agg['TOTAL_CUSTOMERS'].sum()
-    
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Managed Population", f"{total_vol:,.0f}")
-    k2.metric("Avg Med Exposure", f"${df_agg['AVG_MEDICAL_COSTS'].mean():,.0f}")
-    k3.metric("Critical Alerts", f"{risky_vol}", delta="Above Threshold", delta_color="inverse")
-    k4.metric("Risk Penetration", f"{(risky_vol/total_vol)*100:.1f}%" if total_vol > 0 else "0%")
+    # --- ROI & IMPACT HEADER ---
+    with st.container(border=True):
+        c_roi1, c_roi2 = st.columns([1, 3])
+        
+        with c_roi1:
+            st.markdown("#### 🎚️ Sensitivity Control")
+            risk_threshold = st.slider("High Risk Threshold (%)", 0, 50, 25, 
+                                     help="Customers spending more than this % of income on health are flagged.")
+        
+        with c_roi2:
+            st.markdown("#### 💰 Business Impact Analysis")
+            
+            # Calculate ROI Logic
+            risky_vol = df_agg[df_agg['COST_TO_INCOME_RATIO'] > risk_threshold]['TOTAL_CUSTOMERS'].sum()
+            total_vol = df_agg['TOTAL_CUSTOMERS'].sum()
+            
+            # Assumption: Avg Loan Size is $35,000 (Simulated for ROI)
+            # In a real app, this would be SUM(LOAN_AMOUNT) from Snowflake
+            potential_loss = risky_vol * 35000 
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("High Risk Volume", f"{risky_vol} / {total_vol}", delta="Customers flagged")
+            m2.metric("Projected Default Exposure", f"${potential_loss:,.0f}", delta="At Risk Value", delta_color="inverse")
+            m3.metric("Loss Avoided (Model)", f"${potential_loss * 0.85:,.0f}", delta="85% Recovery Rate", delta_color="normal")
 
     st.divider()
 
