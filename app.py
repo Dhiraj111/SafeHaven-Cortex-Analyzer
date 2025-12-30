@@ -40,7 +40,7 @@ with st.sidebar:
 
     st.divider()
     
-    # --- PART 2: AI RISK CALCULATOR (INTERACTIVE) ---
+    # --- PART 2: AI RISK CALCULATOR (FULL) ---
     st.subheader("🔮 AI Risk Calculator")
     
     # Auto-Calculate BMI from Height/Weight
@@ -86,19 +86,24 @@ with st.sidebar:
             fig_gauge.update_layout(height=200, margin=dict(l=10, r=10, t=30, b=10))
             st.plotly_chart(fig_gauge, use_container_width=True)
 
+            # Decision & Explainability
             if risk_score > 0.7:
                 st.error("🚨 REJECT APPLICATION")
             elif risk_score > 0.3:
                 st.warning("⚠️ MANUAL REVIEW")
             else:
                 st.success("✅ AUTO-APPROVE")
-                
+            
+            with st.expander("Why this score?"):
+                 st.write(f"**Health Burden:** {(p_costs/p_income)*100:.1f}% of Income")
+                 st.write(f"**BMI Factor:** {p_bmi:.1f} (Normal: 18-25)")
+
         except Exception as e:
             st.error(f"Prediction Error: {e}")
 
     st.divider()
 
-    # --- PART 3: SCENARIO SIMULATION (NEW!) ---
+    # --- PART 3: SCENARIO SIMULATION ---
     st.subheader("🚨 Chaos Simulation")
     
     if 'batch_count' not in st.session_state:
@@ -106,7 +111,6 @@ with st.sidebar:
 
     st.write(f"**Batches Injected:** {st.session_state.batch_count}")
     
-    # NEW: Choose your disaster
     scenario = st.selectbox("Select Scenario:", ["📉 Economic Recession", "病毒 Health Crisis", "📈 Market Boom"])
 
     if st.button(f"Inject {scenario}"):
@@ -119,18 +123,15 @@ with st.sidebar:
                 values_ins = []
                 
                 for email in new_emails:
-                    # Logic changes based on scenario!
                     if "Recession" in scenario:
-                        # Low Income, High Defaults
                         inc = random.randint(20000, 40000)
                         status = 'Default'
                         costs = random.randint(1000, 5000)
                     elif "Health" in scenario:
-                        # Normal Income, High Medical Costs
                         inc = random.randint(50000, 80000)
                         status = 'Fully Paid'
-                        costs = random.randint(40000, 90000) # HUGE COSTS
-                    else: # Boom
+                        costs = random.randint(40000, 90000)
+                    else:
                         inc = random.randint(90000, 150000)
                         status = 'Fully Paid'
                         costs = random.randint(1000, 3000)
@@ -183,7 +184,7 @@ with st.expander("🔍 Risk Officer Controls", expanded=True):
     col_ctrl1, col_ctrl2 = st.columns([1, 2])
     
     with col_ctrl1:
-        # Dynamic Risk Threshold Slider
+        # Dynamic Risk Threshold
         risk_threshold = st.slider("Define 'High Risk' Threshold (Cost-to-Income %)", 0, 50, 20)
         st.caption(f"Flagging any grade > {risk_threshold}% exposure")
         
@@ -197,11 +198,9 @@ if selected_grades:
 else:
     df_filtered = df
 
-# Feature 2: KPIs (Dynamic based on Slider!)
+# Feature 2: KPIs (Dynamic)
 total_users = df_filtered['TOTAL_CUSTOMERS'].sum()
 avg_med_cost = df_filtered['AVG_MEDICAL_COSTS'].mean() if not df_filtered.empty else 0
-
-# Count how many grades exceed the USER'S threshold
 risky_grades = df_filtered[df_filtered['COST_TO_INCOME_RATIO'] > risk_threshold]
 high_risk_vol = risky_grades['TOTAL_CUSTOMERS'].sum()
 
@@ -217,7 +216,6 @@ col1, col2 = st.columns([1, 2])
 
 with col1:
     st.subheader("📋 Live Activity Feed")
-    # Highlight rows that exceed the user's threshold
     def highlight_risk(val):
         color = '#ff4b4b' if val > risk_threshold else ''
         return f'background-color: {color}'
@@ -234,20 +232,18 @@ with col2:
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Bar Trace
     fig.add_trace(
         go.Bar(x=df_filtered['CREDIT_GRADE'], y=df_filtered['TOTAL_CUSTOMERS'], name="Volume", marker_color='#83c9ff'),
         secondary_y=False
     )
 
-    # Line Trace
     fig.add_trace(
         go.Scatter(x=df_filtered['CREDIT_GRADE'], y=df_filtered['COST_TO_INCOME_RATIO'], name="Risk Ratio (%)", mode='lines+markers', line=dict(color='#ff4b4b', width=4)),
         secondary_y=True
     )
     
-    # DYNAMIC THRESHOLD LINE (Moves with Slider!)
-    fig.add_hrect(y0=risk_threshold, y1=risk_threshold+0.5, line_width=0, fillcolor="red", opacity=0.5, annotation_text="High Risk Threshold", annotation_position="top right")
+    # DYNAMIC LINE
+    fig.add_hrect(y0=risk_threshold, y1=risk_threshold+0.5, line_width=0, fillcolor="red", opacity=0.5, annotation_text="Threshold", annotation_position="top right")
 
     fig.update_layout(
         height=450,
@@ -260,27 +256,43 @@ with col2:
 
     st.plotly_chart(fig, use_container_width=True)
 
-# 5. Cortex AI Analysis
+# 5. CORTEX AI AGENT (CHATBOT)
 st.divider()
-st.subheader("🤖 Cortex AI Executive Summary")
+st.subheader("🤖 AI Risk Analyst Agent")
+st.caption("Ask questions about the filtered data (e.g., 'Why is Grade G risky?', 'Summarize the medical costs')")
 
-if st.button("Generate AI Insight"):
-    with st.spinner("Cortex AI is analyzing the correlation..."):
-        try:
-            data_context = df_filtered.to_string()
-            prompt = f"""
-            You are a Risk Officer. Analyze this dataset:
-            {data_context}
-            
-            1. Which Credit Grade has the worst 'COST_TO_INCOME_RATIO'?
-            2. Are any grades exceeding the safety threshold of {risk_threshold}%?
-            3. Provide a brief recommendation.
-            """
-            prompt_clean = prompt.replace("'", "''")
-            cortex_query = f"SELECT snowflake.cortex.COMPLETE('llama3-8b', '{prompt_clean}') as response"
-            result = conn.query(cortex_query, ttl=0)
-            st.success(result.iloc[0]['RESPONSE'])
-            
-        except Exception as e:
-            st.warning("Simulated AI Response.")
-            st.info("**AI Assessment:** CRITICAL CORRELATION DETECTED. Multiple grades exceed your defined risk threshold.")
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("Ask the AI Risk Officer..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Analyzing data..."):
+            try:
+                data_context = df_filtered.to_string()
+                full_prompt = f"""
+                [ROLE]
+                You are a Senior Risk Officer. Analyze this dataset:
+                {data_context}
+                [QUESTION]
+                {prompt}
+                [INSTRUCTION]
+                Answer strictly based on the data. Be concise.
+                """
+                prompt_clean = full_prompt.replace("'", "''")
+                cortex_query = f"SELECT snowflake.cortex.COMPLETE('llama3-8b', '{prompt_clean}') as response"
+                result = conn.query(cortex_query, ttl=0)
+                response_text = result.iloc[0]['RESPONSE']
+                
+                st.markdown(response_text)
+                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                
+            except Exception as e:
+                st.error("AI Error (Likely token limit or region).")
