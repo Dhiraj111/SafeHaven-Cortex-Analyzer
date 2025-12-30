@@ -4,8 +4,10 @@ class ChaosEngine:
     @staticmethod
     def generate_batch(scenario, batch_id):
         new_emails = [f"user_{batch_id}_{i}_{random.randint(100,999)}@corp.com" for i in range(25)]
-        values_bank = []
-        values_ins = []
+        
+        # Lists of tuples (Raw Data)
+        data_bank = []
+        data_ins = []
         
         for email in new_emails:
             if "Recession" in scenario:
@@ -18,10 +20,13 @@ class ChaosEngine:
                 inc, status, costs = random.randint(90000, 150000), 'Fully Paid', random.randint(500, 4000)
                 region = random.choice(['west', 'northwest'])
 
-            values_bank.append(f"('{email}', 50000, '60 months', 25.5, 'G', {inc}, '{status}')")
-            values_ins.append(f"('{email}', {random.randint(25, 65)}, {random.uniform(22, 38):.1f}, {costs}, 'yes', '{region}')")
+            # Tuple: (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status)
+            data_bank.append((email, 50000, '60 months', 25.5, 'G', inc, status))
             
-        return values_bank, values_ins
+            # Tuple: (email, age, bmi, charges, smoker, region)
+            data_ins.append((email, random.randint(25, 65), round(random.uniform(22, 38), 1), costs, 'yes', region))
+            
+        return data_bank, data_ins
 
 class StressTester:
     @staticmethod
@@ -30,6 +35,7 @@ class StressTester:
         probs = []
         for s in stresses:
             new_charge = user_data['CHARGES'] * s
+            # Passed as raw numbers, predict_risk now handles the binding
             p = db_manager.predict_risk(user_data['ANNUAL_INC'], user_data['AGE'], user_data['BMI'], new_charge)
             probs.append(p * 100)
         return probs

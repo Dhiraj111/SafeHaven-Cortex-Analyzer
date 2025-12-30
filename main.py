@@ -33,19 +33,24 @@ with st.sidebar:
     with st.container(border=True):
         scenario = st.selectbox("Market Scenario:", ["📉 Economic Recession", "🏥 Health Crisis", "📈 Market Boom"])
         
+        # --- SECURE INJECTION LOGIC STARTS HERE ---
         if st.button("Inject Event Stream", type="primary", use_container_width=True):
             with st.spinner("Streaming PII-cleansed data..."):
-                v_bank, v_ins = ChaosEngine.generate_batch(scenario, st.session_state.batch_count)
+                # 1. Get Raw Data Tuples (Secure, not strings)
+                v_bank_tuples, v_ins_tuples = ChaosEngine.generate_batch(scenario, st.session_state.batch_count)
                 
-                sql_bank = f"INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES {','.join(v_bank)}"
-                sql_ins = f"INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES {','.join(v_ins)}"
+                # 2. Define Parameterized SQL (Using %s placeholders)
+                sql_bank = "INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                sql_ins = "INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES (%s, %s, %s, %s, %s, %s)"
                 
-                if db.run_command(sql_bank) and db.run_command(sql_ins):
+                # 3. Secure Bulk Insert
+                if db.bulk_insert(sql_bank, v_bank_tuples) and db.bulk_insert(sql_ins, v_ins_tuples):
                     db.run_command("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
                     st.session_state.batch_count += 1
-                    st.toast("Data stream processed.", icon="⚡")
+                    st.toast("Data stream processed securely.", icon="🔒")
                     time.sleep(1)
                     st.rerun()
+        # --- SECURE INJECTION LOGIC ENDS HERE ---
 
     if st.button("🗑️ Purge Test Data", use_container_width=True):
          db.run_command("DELETE FROM BANK_DB.DATA.LOAN_CUSTOMERS WHERE EMAIL LIKE 'user_%'")
