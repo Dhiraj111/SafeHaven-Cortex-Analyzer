@@ -39,9 +39,9 @@ with st.sidebar:
                 # 1. Get Raw Data Tuples (Secure, not strings)
                 v_bank_tuples, v_ins_tuples = ChaosEngine.generate_batch(scenario, st.session_state.batch_count)
                 
-                # 2. Define Parameterized SQL (Using %s placeholders)
-                sql_bank = "INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-                sql_ins = "INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES (%s, %s, %s, %s, %s, %s)"
+                # FIX: Use '?' placeholders instead of '%s' for Snowflake compatibility
+                sql_bank = "INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                sql_ins = "INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES (?, ?, ?, ?, ?, ?)"
                 
                 # 3. Secure Bulk Insert
                 if db.bulk_insert(sql_bank, v_bank_tuples) and db.bulk_insert(sql_ins, v_ins_tuples):
