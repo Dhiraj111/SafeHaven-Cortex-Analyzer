@@ -34,8 +34,12 @@ class StressTester:
         stresses = [0.8, 1.0, 1.2, 1.4, 1.6] 
         probs = []
         for s in stresses:
-            new_charge = user_data['CHARGES'] * s
-            # Passed as raw numbers, predict_risk now handles the binding
-            p = db_manager.predict_risk(user_data['ANNUAL_INC'], user_data['AGE'], user_data['BMI'], new_charge)
+            # FIX: Convert all inputs to standard Python types before sending to DB
+            new_charge = float(user_data['CHARGES'] * s)
+            income = int(user_data['ANNUAL_INC'])
+            age = int(user_data['AGE'])
+            bmi = float(user_data['BMI'])
+            
+            p = db_manager.predict_risk(income, age, bmi, new_charge)
             probs.append(p * 100)
         return probs

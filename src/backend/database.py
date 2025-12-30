@@ -68,11 +68,17 @@ class SnowflakeManager:
     # SECURE: Now uses %s placeholders instead of f-strings
     def predict_risk(self, income, age, bmi, charges):
         try:
-            sql = "SELECT CLEAN_ROOM_DB.ANALYSIS.PREDICT_RISK(%s, %s, %s, %s) as P"
-            params = (income, age, bmi, charges)
+            # FIX: Changed %s to ? for Snowflake compatibility
+            sql = "SELECT CLEAN_ROOM_DB.ANALYSIS.PREDICT_RISK(?, ?, ?, ?) as P"
+            
+            # Ensure inputs are standard Python types (not NumPy)
+            params = (int(income), int(age), float(bmi), float(charges))
+            
             res = self.execute_query(sql, params)
             return res.iloc[0]['P']
-        except:
+        except Exception as e:
+            # This helps us see the exact error if it fails again
+            st.error(f"Prediction Error: {e}")
             return 0.0
 
     def ask_cortex(self, context, question):

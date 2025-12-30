@@ -42,7 +42,7 @@ with st.sidebar:
                 # FIX: Use '?' placeholders instead of '%s' for Snowflake compatibility
                 sql_bank = "INSERT INTO BANK_DB.DATA.LOAN_CUSTOMERS (email, loan_amnt, term, int_rate, grade, annual_inc, loan_status) VALUES (?, ?, ?, ?, ?, ?, ?)"
                 sql_ins = "INSERT INTO INSURER_DB.DATA.MEDICAL_CLIENTS (email, age, bmi, charges, smoker, region) VALUES (?, ?, ?, ?, ?, ?)"
-                
+
                 # 3. Secure Bulk Insert
                 if db.bulk_insert(sql_bank, v_bank_tuples) and db.bulk_insert(sql_ins, v_ins_tuples):
                     db.run_command("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
@@ -119,7 +119,12 @@ with tab2:
                 h1.subheader(f"Dossier: {format_id(user_data['EMAIL'])}")
                 h2.caption("✅ PII Masking Active")
                 
-                prob = db.predict_risk(user_data['ANNUAL_INC'], user_data['AGE'], user_data['BMI'], user_data['CHARGES'])
+                prob = db.predict_risk(
+                    int(user_data['ANNUAL_INC']), 
+                    int(user_data['AGE']), 
+                    float(user_data['BMI']), 
+                    float(user_data['CHARGES'])
+                )
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Grade", user_data['GRADE'])
                 c2.metric("Income", f"${user_data['ANNUAL_INC']:,.0f}")
