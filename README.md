@@ -1,90 +1,179 @@
-# 🛡️ SafeHaven: AI-Powered Privacy Clean Room
+# 🛡 SafeHaven Risk Intelligence Dashboard
 
-### 🏆 Built for AI for Good Hackathon 2025
+## Overview
 
-**SafeHaven** is a privacy-first analytics platform that enables
-financial institutions (Banks) and Insurance providers to securely
-collaborate. It uses a **Snowflake Data Clean Room** to join sensitive
-datasets without exposing PII, and applies **Snowpark ML** to predict
-customer risk in real-time.
+**SafeHaven** is an internal **risk intelligence dashboard** designed to help organizations detect **early signs of financial and healthcare stress** across customer populations — **without exposing personal identities**.
 
-------------------------------------------------------------------------
+The dashboard combines aggregated financial and medical indicators to highlight **where risk is rising**, enabling teams to take **proactive, human-led actions** instead of reacting after defaults, claim failures, or crises occur.
 
-## 🚨 The Problem
-
-Banks and Insurers possess highly correlated data---financial stress
-often leads to health decline, and vice-versa. However, strict privacy
-regulations (GDPR, CCPA) and competitive secrecy prevent them from
-sharing raw customer data. \* **Result:** Both industries operate with
-"Risk Blind Spots." \* **Consequence:** Higher default rates and
-inaccurate insurance premiums.
-
-## 💡 The Solution
-
-SafeHaven acts as a "Trusted Third Party" bridge. It ingests data from
-both silos, hashes the identities (SHA-256), and allows for **Predictive
-Risk Modeling** on the combined dataset without ever decrypting the
-user's identity.
-
-------------------------------------------------------------------------
-
-## ⚙️ How It Works (Architecture)
-
-``` mermaid
-graph TD
-    A[Bank Database] -->|Hashed Emails| C{Snowflake Clean Room}
-    B[Insurance Database] -->|Hashed Emails| C
-    
-    C -->|Aggregated Data| D[Dynamic Tables]
-    D -->|Live Updates| E[Streamlit Dashboard]
-    
-    C -->|Training Data| F[Snowpark ML Training]
-    F -->|Model Artifact| G[Logistic Regression Model]
-    
-    G -->|UDF Inference| E
-    
-    subgraph "Generative AI Layer"
-    D --> H[Snowflake Cortex]
-    H -->|Natural Language Summary| E
-    end
+This project is built as an **enterprise internal tool**, not a consumer application.
 
 ---
 
-## 🚀 Key Features
-1. 🔒 Privacy-First Clean Room
-Joins datasets using SHA-256 hashed email keys.
+## Why This Dashboard Is Needed
 
-Aggregates data to the CREDIT_GRADE level to prevent re-identification.
+In most real-world organizations:
 
-Implements Row Access Policies to ensure raw PII never leaves the secure schema.
+- Financial data and healthcare data exist in silos  
+- Risk is detected only after damage is done  
+- Decisions are reactive rather than preventive  
+- Privacy constraints limit meaningful analysis  
 
-2. 🧠 Predictive AI Engine (Snowpark ML)
-Training: We trained a Logistic Regression model inside Snowflake to identify correlations between Medical Costs and Loan Defaults.
+As a result:
+- Customers fall into distress unexpectedly  
+- Institutions face higher losses and compliance pressure  
+- Trust between customers and institutions erodes  
 
-Inference: Deployed a Python UDF (PREDICT_RISK) that scores new customers instantly (0-100% Risk Probability) as they enter the system.
-
-3. ⚡ Real-Time "Chaos" Simulation
-Includes a "Simulation Engine" that injects synthetic high-risk data (e.g., a sudden market crash or pandemic event).
-
-Powered by Snowflake Dynamic Tables (1-minute lag) to instantly reflect these changes in the dashboard.
-
-4. 🤖 Generative AI Insights
-Integrated Snowflake Cortex (Llama-3) to act as an automated Risk Officer.
-
-Reads complex SQL aggregations and generates plain-English executive summaries for non-technical stakeholders.
+**SafeHaven addresses this gap by providing early, privacy-safe risk signals at a population and group level — not personal surveillance.**
 
 ---
 
-## 🛠️ Technology Stack
+## Who This Is For
 
-| Component | Technology | Use Case |
-| :--- | :--- | :--- |
-| **Database** | **Snowflake Data Cloud** | Core storage and compute. |
-| **Machine Learning** | **Snowpark Python** | Training Scikit-Learn models & deploying UDFs. |
-| **Generative AI** | **Snowflake Cortex** | Llama-3-8b model for text summarization. |
-| **Data Pipeline** | **Dynamic Tables** | Automated, declarative real-time ELT. |
-| **Frontend** | **Streamlit** | Interactive dashboard & simulation UI. |
-| **Visualization** | **Plotly** | Advanced interactive charting. |
+### Primary Users (Direct Users)
+- Risk analysts  
+- Credit risk teams  
+- Insurance risk analysts  
+- Compliance and strategy teams  
+
+### Secondary Users (Action Takers)
+- Customer support teams  
+- Relationship managers  
+- Claims or outreach teams (via CRM integration)
+
+### Indirect Beneficiaries
+- Loan customers  
+- Insurance policy holders  
+- Employees and families  
+
+> End customers never log into this system — they benefit from better, earlier decisions made upstream.
+
+---
+
+## Key Features
+
+### 📊 Executive Risk View
+- Population-level risk metrics
+- Adjustable high-risk threshold
+- Geographic concentration of medical exposure
+- Risk vs volume correlation across credit groups
+
+**Purpose:**  
+Help leaders decide *where attention and resources are needed first*.
+
+---
+
+### 🕵 Customer Investigator View (Privacy-Safe)
+- Masked user identifiers (no PII exposed)
+- Financial and medical stress indicators
+- AI-generated risk probability
+- Stress testing (“What if medical costs increase?”)
+
+**Purpose:**  
+Support fair, explainable, human decisions for high-risk cases.
+
+---
+
+### 🤖 AI Analyst Agent
+- Natural-language questions over aggregated data
+- Executive summaries and trend explanations
+- Fail-safe responses if AI services are unavailable
+
+**Purpose:**  
+Reduce analysis time and cognitive load for decision-makers.
+
+---
+
+### ⚡ Simulation (Chaos Engine)
+- Injects synthetic scenarios (economic recession, health crisis, market boom)
+- Tests system behavior under stress
+- Uses only synthetic data — no real customer impact
+
+**Purpose:**  
+Allow teams to practice decision-making safely before real-world events.
+
+---
+
+## Privacy by Design
+
+SafeHaven is built with **privacy-first and compliance-friendly principles**:
+
+- No names, phone numbers, or emails displayed
+- Masked reference IDs only
+- Group-level analysis instead of individual surveillance
+- Human-in-the-loop decision making
+- No automated approvals or rejections
+
+Identity resolution and customer contact are handled **outside this application**, typically within CRM systems such as Salesforce.
+
+---
+
+## How This Fits Into an Enterprise System
+
+Data Warehouse (Snowflake)
+↓
+SafeHaven Dashboard (Risk Detection)
+↓
+CRM / Case System (e.g. Salesforce)
+↓
+Human Support Teams
+↓
+Customer Outreach & Support
+
+---
+
+
+SafeHaven **does not replace CRM systems** — it functions as a **risk signal generator** that feeds existing workflows.
+
+---
+
+## Technology Stack
+
+- **Application Framework:** Streamlit  
+- **Data Processing:** Pandas  
+- **Visualizations:** Plotly  
+- **Data Platform:** Snowflake (Aggregated / Clean Room Views)  
+- **AI & ML:** Snowflake Cortex (Risk prediction & LLMs)
+
+---
+
+## Current Status
+
+This project is a **working internal prototype (PoC)** that demonstrates:
+
+- End-to-end data flow
+- Risk interpretation logic
+- Privacy-safe investigation workflows
+- Enterprise integration patterns
+
+The application intentionally **does not include public signup or authentication**, as it is designed for controlled, internal enterprise usage.
+
+---
+
+## Future Enhancements
+
+- Salesforce CRM integration (Case / Task creation)
+- Role-based access (Executive, Analyst)
+- Decision audit logs
+- Enterprise SSO (Okta / Azure AD / Salesforce Identity)
+- Configurable alert routing and escalation
+
+---
+
+## Project Intent
+
+This project was built to:
+
+- Demonstrate enterprise system and product thinking
+- Explore ethical and privacy-safe use of AI in risk domains
+- Showcase integration between data platforms and CRM systems
+- Serve as a portfolio-grade example of **decision-support software**
+
+---
+
+## One-Line Summary
+
+> **SafeHaven helps organizations act early and fairly when financial and healthcare stress begins to rise — without compromising individual privacy.**
 
 ---
 
