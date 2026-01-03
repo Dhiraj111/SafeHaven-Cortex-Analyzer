@@ -53,12 +53,50 @@ with st.sidebar:
         # --- SECURE INJECTION LOGIC ENDS HERE ---
 
     if st.button("🗑️ Purge Test Data", use_container_width=True):
+         progress_text = "Starting Clean Room Reset..."
+         my_bar = st.progress(0, text=progress_text)
+
+         # 1. Capture the "Before" state so we know when it changes
+         # We query the Dynamic Table (Dashboard View) directly
+         df_start = db.execute_query("SELECT COUNT(*) as C FROM CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS")
+         start_count = df_start.iloc[0]['C'] if not df_start.empty else 0
+         
+         # 2. Delete the raw data
          db.run_command("DELETE FROM BANK_DB.DATA.LOAN_CUSTOMERS WHERE EMAIL LIKE 'user_%'")
          db.run_command("DELETE FROM INSURER_DB.DATA.MEDICAL_CLIENTS WHERE EMAIL LIKE 'user_%'")
+         my_bar.progress(25, text="Raw data deleted. Triggering Snowflake Refresh...")
+         
+         # 3. Trigger the refresh
          db.run_command("ALTER DYNAMIC TABLE CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS REFRESH")
-         st.session_state.batch_count = 0
-         st.rerun()
+         
+         # 4. SMART LOOP: Wait for the Dashboard Table row count to drop
+         # We loop until the count is LESS than the start_count
+         for i in range(20): # Try for 40 seconds
+             time.sleep(2) 
+             
+             # Check the Dashboard Table again
+             df_curr = db.execute_query("SELECT COUNT(*) as C FROM CLEAN_ROOM_DB.ANALYSIS.REAL_WORLD_INSIGHTS")
+             curr_count = df_curr.iloc[0]['C'] if not df_curr.empty else 0
+             
+             # Status update for you
+             my_bar.progress(30 + (i * 3), text=f"Syncing Clean Room... (Rows: {curr_count})")
+             
+             # If rows have dropped, the refresh is done!
+             if curr_count < start_count:
+                 my_bar.progress(100, text="Clean Room Updated!")
+                 break
+             
+             # Fallback: If we started at 0 or stable, and source is empty, we can break if count is 0
+             if curr_count == 0:
+                 break
 
+         # 5. Final Cleanup
+         st.cache_data.clear()
+         st.session_state.batch_count = 0
+         st.success(f"Reset Complete! (Rows dropped from {start_count} to {curr_count})")
+         time.sleep(2)
+         st.rerun()
+         
 # 3. Main Dashboard
 st.title("🛡️ SafeHaven Enterprise")
 st.markdown("##### Privacy-Safe Financial & Healthcare Risk Enclave")

@@ -243,5 +243,5 @@ role = "ACCOUNTADMIN"
 ### 5. Run the App
 
 ``` bash
-streamlit run app.py
+streamlit run main.py
 ```
