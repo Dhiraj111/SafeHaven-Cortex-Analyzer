@@ -190,6 +190,11 @@ It intentionally avoids complex authentication or production deployment details 
 
 ---
 
+## 📊 Data & Architecture
+The simulation engine is powered by real-world datasets to ensure statistical validity:
+* **Financial Data:** Modeled on the [Lending Club Loan Dataset](https://www.kaggle.com/datasets/wordsforthewise/lending-club) (Kaggle).
+* **Healthcare Data:** Modeled on the [Medical Cost Personal Datasets](https://www.kaggle.com/datasets/mirichoi0218/insurance) (Kaggle).
+
 ## One-Line Summary
 
 > **SafeHaven uses AI to detect early financial and healthcare stress in India — so institutions can help families before crisis strikes.**
