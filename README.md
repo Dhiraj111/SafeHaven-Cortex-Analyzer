@@ -1,5 +1,7 @@
 # 🛡 SafeHaven – AI for Early Financial & Healthcare Stress Detection
 
+**[Live Demo 🚀](https://safehaven-cortex-analyzer-jpb9mt7nbvs2usmhatykgg.streamlit.app/)**
+
 ## AI Bharat Hackathon Submission
 
 ---
